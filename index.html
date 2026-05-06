@@ -347,12 +347,7 @@
     <span class="site-title">ばんえい競馬</span>
     <span class="date-badge">2026年5月4日（月）</span>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-    <span class="race-count">全12レース</span>
-    <button onclick="exportData()" style="background:var(--accent3);border:none;color:#fff;font-size:11px;padding:5px 10px;border-radius:4px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;white-space:nowrap;">💾 保存</button>
-    <button onclick="importData()" style="background:transparent;border:1px solid var(--accent3);color:var(--text2);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;white-space:nowrap;">📥 読込</button>
-    <button onclick="clearData()" style="background:transparent;border:1px solid #c84040;color:#c84040;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:'Noto Sans JP',sans-serif;white-space:nowrap;">🗑</button>
-  </div>
+  <span class="race-count">全12レース</span>
 </header>
 
 <nav class="race-nav" id="raceNav">
@@ -637,7 +632,18 @@ function cycleMark(cell, pIdx, raceIdx, horseIdx) {
 }
 
 // ── Export / Import ──────────────────────────────────
-function saveData() {} // no-op (data lives in memory only)
+function saveData() {
+  const data = { marks, scratched: [] };
+  document.querySelectorAll('tr.scratched[data-horse]').forEach(row => {
+    const panel = row.closest('.race-panel');
+    if (!panel) return;
+    data.scratched.push({
+      rIdx: parseInt(panel.id.replace('panel-','')),
+      hIdx: parseInt(row.dataset.horse)
+    });
+  });
+  try { localStorage.setItem('banei_2026_5_4', JSON.stringify(data)); } catch(e) {}
+}
 
 function collectData() {
   const data = { marks, scratched: [] };
@@ -700,7 +706,38 @@ function applyData(raw) {
   }
 }
 
-function loadData() {} // no-op: data restored via importData
+function loadData() {
+  try {
+    const raw = localStorage.getItem('banei_2026_5_4');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.marks) {
+      data.marks.forEach((pMarks, p) => {
+        pMarks.forEach((rMarks, r) => {
+          rMarks.forEach((val, h) => {
+            if (marks[p] && marks[p][r] !== undefined) marks[p][r][h] = val;
+          });
+        });
+      });
+    }
+    if (data.scratched) {
+      data.scratched.forEach(({ rIdx, hIdx }) => {
+        const row = document.querySelector(`#panel-${rIdx} tbody tr[data-horse="${hIdx}"]`);
+        if (row) row.classList.add('scratched');
+      });
+    }
+    races.forEach((r, rIdx) => {
+      r.entries.forEach((_, hIdx) => {
+        for (let p = 0; p < NUM_PREDICTORS; p++) {
+          const cell = document.querySelector(`#panel-${rIdx} tbody tr[data-horse="${hIdx}"] .mark-cell[data-p="${p}"]`);
+          if (cell) { cell.dataset.val = marks[p][rIdx][hIdx]; cell.textContent = marks[p][rIdx][hIdx]; }
+        }
+        updateScore(rIdx, hIdx);
+      });
+      updateAllRanks(rIdx);
+    });
+  } catch(e) {}
+}
 
 function clearData() {
   if (!confirm('全レースの予想データをリセットしますか？')) return;
